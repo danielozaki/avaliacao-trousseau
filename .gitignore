@@ -1,0 +1,17 @@
+# dados reais nunca entram no repositório
+dados_reais*
+*_reais*.json
+backup*.json
+avaliacoes_trousseau*.json
+nine_box_trousseau*.csv
+auditoria_trousseau*.csv
+
+# fotos originais
+FOTOS*/
+*.rar
+*.zip
+
+# sistema
+.DS_Store
+Thumbs.db
+node_modules/
