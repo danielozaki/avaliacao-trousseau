@@ -2371,14 +2371,15 @@ function renderAval(){
 
 /* ---------------- 04 PLR ---------------- */
 function renderPlr(){
-  const tot = DADOS.map(p=>plr(p));
+  const base = baseOper();               /* líder vê só o próprio setor; gerente vê todos */
+  const tot = base.map(p=>plr(p));
   const S = k => tot.reduce((a,x)=>a+x[k],0);
   const teto=S('teto'), total=S('total');
-  const mesDes = MESES.map((m,i)=>DADOS.reduce((a,p)=>a+p.des[i],0));
-  const mesRede= MESES.map((m,i)=>DADOS.reduce((a,p)=>a+p.rede[i],0));
+  const mesDes = MESES.map((m,i)=>base.reduce((a,p)=>a+p.des[i],0));
+  const mesRede= MESES.map((m,i)=>base.reduce((a,p)=>a+p.rede[i],0));
 
   $('#kpiPlr').innerHTML = [
-    ['PLR pago · 1ºS', brl0(total), '52 colaboradores, jan a jun', 'gold'],
+    ['PLR pago · 1ºS', brl0(total), base.length+' colaboradores, jan a jun', 'gold'],
     ['Teto do semestre', brl0(teto), 'todos em Ouro nos 6 meses', ''],
     ['Realização', pct(total/teto), 'do valor máximo possível', total/teto<0.5?'risk':''],
     ['Medalha Des (40%)', brl0(S('tDes')), pct(S('tDes')/total)+' do pago', ''],
@@ -2386,7 +2387,7 @@ function renderPlr(){
     ['Meses com Rede', mesRede.filter(x=>x>0).length+' de 6', 'resultado comercial atingido', 'risk']
   ].map(k=>`<div class="kpi ${k[3]}"><div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
 
-  const inc = DADOS.filter(p=>plr(p).incoerente);
+  const inc = base.filter(p=>plr(p).incoerente);
   const A=[];
   A.push(['bad','A Rede carrega 60% do prêmio e foi atingida em um único mês',
     'Março, na faixa Prata. Nos outros cinco meses o componente comercial pagou zero. Resultado: R$ '+
@@ -2394,10 +2395,10 @@ function renderPlr(){
     ' de Des. Na prática, a maior parte do incentivo do quadro operacional depende de um indicador que ele não controla — o mesmo ponto do gap comercial de H1.']);
   if(inc.length) A.push(['bad','Divergência entre medalha e valor pago',
     inc.map(p=>{const pl=plr(p);return esc(curto(p.nome))+': medalha '+p.medDes+' (valor mês '+brl0(pl.valMed)+', Des esperado '+brl0(pl.desMes)+') mas recebeu '+brl0(p.des.find(x=>x>0))+' por mês';}).join('; ')+'.']);
-  const semDes = DADOS.filter(p=>plr(p).mDes<6);
+  const semDes = base.filter(p=>plr(p).mDes<6);
   A.push(['','Meses parciais por admissão — '+semDes.length+' colaboradores',
     'Recebem proporcional ao tempo de casa no semestre. Confirmar se a regra de proporcionalidade está formalizada no regulamento do PLR, porque hoje ela só existe na planilha.']);
-  const tetoRel = DADOS.map(p=>({n:p.nome,r:6*p.medVal.Ouro/p.sal})).sort((a,b)=>b.r-a.r);
+  const tetoRel = base.map(p=>({n:p.nome,r:6*p.medVal.Ouro/p.sal})).sort((a,b)=>b.r-a.r);
   A.push(['','O teto não é 1 salário para todos',
     'Somando os 6 meses no Ouro, o prêmio máximo varia de '+pct(tetoRel[tetoRel.length-1].r)+' a '+pct(tetoRel[0].r)+
     ' do salário mensal, conforme a faixa de valor da medalha. Se a regra comunicada é “até 1 salário”, a tabela de valores por faixa precisa ser reancorada.']);
@@ -2410,17 +2411,17 @@ function renderPlr(){
   ).join('');
 
   const med={Ouro:0,Prata:0,Bronze:0}, medV={Ouro:0,Prata:0,Bronze:0};
-  DADOS.forEach(p=>{med[p.medDes]++; medV[p.medDes]+=plr(p).total;});
+  base.forEach(p=>{med[p.medDes]++; medV[p.medDes]+=plr(p).total;});
   $('#barsMed').innerHTML = ['Ouro','Prata','Bronze'].map(k=>
-    barra(k+' · '+med[k]+' pessoas', med[k], DADOS.length, k==='Ouro'?'g':(k==='Bronze'?'r':''), brl0(medV[k]))).join('');
+    barra(k+' · '+med[k]+' pessoas', med[k], base.length, k==='Ouro'?'g':(k==='Bronze'?'r':''), brl0(medV[k]))).join('');
 
-  const setor={}; DADOS.forEach(p=>{setor[p.setor]=(setor[p.setor]||0)+plr(p).total;});
+  const setor={}; base.forEach(p=>{setor[p.setor]=(setor[p.setor]||0)+plr(p).total;});
   const mxs=Math.max(...Object.values(setor));
   $('#barsPlrSetor').innerHTML = Object.entries(setor).sort((a,b)=>b[1]-a[1])
     .map(([k,v])=>barra(k, v, mxs, '', brl0(v))).join('');
 
   /* coerência medalha x comportamento */
-  const coer={}; DADOS.forEach(p=>{const e=eixosAtual(p); const f=e?e.fy:'pendente';
+  const coer={}; base.forEach(p=>{const e=eixosAtual(p); const f=e?e.fy:'pendente';
     const k=p.medDes+' × '+f; coer[k]=(coer[k]||0)+1;});
   const mxc=Math.max(...Object.values(coer));
   $('#barsCoer').innerHTML = Object.entries(coer).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
@@ -2430,7 +2431,7 @@ function renderPlr(){
   $('#tbPlr').innerHTML = `<thead><tr><th>Colaborador</th><th>Cargo</th>${verSal?'<th class="num">Salário</th>':''}<th>Medalha</th>
     <th class="num">Valor medalha/mês</th><th class="num">Des/mês (40%)</th><th class="num">Meses Des</th><th class="num">Total Des</th>
     <th class="num">Total Rede</th><th class="num">Total 1ºS</th><th class="num">% salário</th><th class="num">% do teto</th></tr></thead><tbody>`
-    + DADOS.map(p=>{const x=plr(p); return `<tr>
+    + base.map(p=>{const x=plr(p); return `<tr>
       <td class="nm"><span class="celnome">${avatarHtml(p,'p')}<span>${esc(p.nome)}</span></span></td>
       <td class="tiny">${esc(p.cargo)}</td>${verSal?`<td class="num">${brl0(p.sal)}</td>`:''}
       <td><span class="tag t-${p.medDes}">${p.medDes}</span></td>
@@ -2439,7 +2440,7 @@ function renderPlr(){
       <td class="num" style="font-weight:600">${brl0(x.total)}</td>
       <td class="num">${verSal?pct(x.pctSal):'—'}</td><td class="num">${pct(x.real)}</td></tr>`;}).join('')
     + `<tr style="background:var(--paper2);font-weight:600"><td>Total</td><td></td>
-      ${verSal?`<td class="num">${brl0(DADOS.reduce((a,p)=>a+p.sal,0))}</td>`:''}<td></td><td></td><td></td><td></td>
+      ${verSal?`<td class="num">${brl0(base.reduce((a,p)=>a+p.sal,0))}</td>`:''}<td></td><td></td><td></td><td></td>
       <td class="num">${brl0(S('tDes'))}</td><td class="num">${brl0(S('tRede'))}</td>
       <td class="num">${brl0(total)}</td><td class="num"></td><td class="num">${pct(total/teto)}</td></tr></tbody>`;
 }
