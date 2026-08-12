@@ -12,7 +12,7 @@
 const NUVEM = !!(window.SUPA && window.SUPA.url && window.SUPA.anonKey
                  && !/COLE_/i.test(window.SUPA.url + window.SUPA.anonKey));
 let sb = null;
-let VERSAO = { avaliacao: null, remuneracao: null };
+let VERSAO = { avaliacao: null, plr: null, remuneracao: null };
 let TEM_REMUNERACAO = true;
 
 if (NUVEM) {
@@ -21,17 +21,19 @@ if (NUVEM) {
 }
 
 /* ---------------------------------------------------------- separação --- */
-const CAMPOS_DINHEIRO = ['sal', 'medDes', 'medVal', 'des', 'rede', 'total'];
+const CAMPOS_PLR     = ['medDes', 'medVal', 'des', 'rede', 'total'];
+const CAMPOS_SALARIO = ['sal'];
 
 function separarDocumentos() {
   guardarCiclo(CICLO_ATIVO);
-  const semDinheiro = [], comDinheiro = [], meritos = {};
+  const semDinheiro = [], comDinheiro = [], comPlr = [], meritos = {};
 
   DADOS.forEach(p => {
-    const base = {}, money = { id: p.id };
+    const base = {}, money = { id: p.id }, valorPlr = { id: p.id };
     Object.keys(p).forEach(k => {
       if (k === 'foto') return;                       // foto mora no HTML
-      if (CAMPOS_DINHEIRO.includes(k)) money[k] = p[k];
+      if (CAMPOS_PLR.includes(k)) valorPlr[k] = p[k];
+      else if (CAMPOS_SALARIO.includes(k)) money[k] = p[k];
       else base[k] = p[k];
     });
     /* o mérito vive dentro do histórico do ciclo: sai de lá e vai para o
@@ -52,6 +54,7 @@ function separarDocumentos() {
     delete base.merito;
     semDinheiro.push(base);
     comDinheiro.push(money);
+    comPlr.push(valorPlr);
   });
 
   return {
@@ -59,6 +62,7 @@ function separarDocumentos() {
       v: 5, pessoas: semDinheiro, ciclo: CICLO_ATIVO, assinaturas: ASSINA,
       respPonto: RESP_PONTO, pontoFaixas: PONTO_FAIXAS, verMaturidade: VER_MATURIDADE
     },
+    plr: { v: 5, pessoas: comPlr },
     remuneracao: {
       v: 5, pessoas: comDinheiro, meritos,
       merito: { verba: MERITO.verba, modo: MERITO.modo, corte: MERITO.corte,
@@ -67,24 +71,24 @@ function separarDocumentos() {
   };
 }
 
-function juntarDocumentos(aval, remun) {
+function juntarDocumentos(aval, remun, docPlr) {
   if (!aval || !Array.isArray(aval.pessoas)) return false;
-  const money = {};
+  const money = {}, valores = {};
   if (remun && Array.isArray(remun.pessoas)) remun.pessoas.forEach(m => money[m.id] = m);
+  if (docPlr && Array.isArray(docPlr.pessoas)) docPlr.pessoas.forEach(m => valores[m.id] = m);
   const meritos = (remun && remun.meritos) || {};
 
   DADOS.length = 0;
   aval.pessoas.forEach(base => {
     const p = Object.assign({}, base);
-    const m = money[p.id];
-    /* sem permissão de salário os valores vêm zerados — a interface já
-       esconde as colunas, e aqui nem os números chegam ao navegador */
+    const m = money[p.id], v = valores[p.id];
+    /* o que a pessoa não pode ver não chega ao navegador: vem zerado do banco */
     p.sal    = m ? m.sal    : 0;
-    p.medDes = m ? m.medDes : 'Bronze';
-    p.medVal = m ? m.medVal : { Bronze: 0, Prata: 0, Ouro: 0 };
-    p.des    = m ? m.des    : [0,0,0,0,0,0];
-    p.rede   = m ? m.rede   : [0,0,0,0,0,0];
-    p.total  = m ? m.total  : 0;
+    p.medDes = v ? v.medDes : 'Bronze';
+    p.medVal = v ? v.medVal : { Bronze: 0, Prata: 0, Ouro: 0 };
+    p.des    = v ? v.des    : [0,0,0,0,0,0];
+    p.rede   = v ? v.rede   : [0,0,0,0,0,0];
+    p.total  = v ? v.total  : 0;
     if (p.hist && meritos[p.id]) {
       Object.entries(meritos[p.id]).forEach(([ciclo, mer]) => {
         if (p.hist[ciclo]) p.hist[ciclo].merito = mer;
@@ -119,7 +123,7 @@ async function nuvemPerfil() {
   const { data: u } = await sb.auth.getUser();
   if (!u || !u.user) throw new Error('Sessão não encontrada.');
   const { data, error } = await sb.from('perfil')
-    .select('nome, papel, setores, ver_salario, pode_editar')
+    .select('nome, papel, setores, ver_salario, ver_plr, pode_editar')
     .eq('user_id', u.user.id).maybeSingle();
   if (error || !data) {
     await sb.auth.signOut();
@@ -134,6 +138,7 @@ async function nuvemPerfil() {
     papel: data.papel,
     setores: (data.setores && data.setores.length) ? data.setores : null,
     verSalario: !!data.ver_salario,
+    verPlr: !!(data.ver_plr || data.ver_salario),
     editar: !!data.pode_editar,
     email: u.user.email
   };
@@ -155,7 +160,9 @@ async function nuvemCarregar() {
   (data || []).forEach(d => { por[d.chave] = d; VERSAO[d.chave] = d.versao; });
   TEM_REMUNERACAO = !!por.remuneracao;
   if (!por.avaliacao) return false;                 // base ainda vazia
-  return juntarDocumentos(por.avaliacao.dados, por.remuneracao && por.remuneracao.dados);
+  return juntarDocumentos(por.avaliacao.dados,
+                          por.remuneracao && por.remuneracao.dados,
+                          por.plr && por.plr.dados);
 }
 
 let salvandoNuvem = false, pendente = false;
@@ -165,7 +172,9 @@ async function nuvemSalvar() {
   salvandoNuvem = true;
   try {
     const docs = separarDocumentos();
-    const alvos = PERFIL_NUVEM.verSalario ? ['avaliacao', 'remuneracao'] : ['avaliacao'];
+    /* PLR e salário só são gravados por quem administra remuneração */
+    const alvos = PERFIL_NUVEM.verSalario
+      ? ['avaliacao', 'plr', 'remuneracao'] : ['avaliacao'];
     for (const chave of alvos) {
       const { data, error } = await sb.rpc('salvar_documento',
         { p_chave: chave, p_dados: docs[chave], p_versao: VERSAO[chave] });
@@ -216,7 +225,7 @@ async function nuvemSemear() {
   if (!PERFIL_NUVEM || PERFIL_NUVEM.papel !== 'gerente') {
     marcar('Só o gerente pode fazer a carga inicial'); return false;
   }
-  VERSAO = { avaliacao: null, remuneracao: null };
+  VERSAO = { avaliacao: null, plr: null, remuneracao: null };
   const ok = await nuvemSalvar();
   if (ok) marcar('Carga inicial concluída · ' + DADOS.length + ' colaboradores');
   return ok;
