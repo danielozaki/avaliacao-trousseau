@@ -14,6 +14,7 @@ const NUVEM = !!(window.SUPA && window.SUPA.url && window.SUPA.anonKey
 let sb = null;
 let VERSAO = { avaliacao: null, plr: null, remuneracao: null };
 let TEM_REMUNERACAO = true;
+let TEM_PLR = true;
 
 if (NUVEM) {
   try { sb = window.supabase.createClient(window.SUPA.url, window.SUPA.anonKey); }
@@ -159,6 +160,7 @@ async function nuvemCarregar() {
   const por = {};
   (data || []).forEach(d => { por[d.chave] = d; VERSAO[d.chave] = d.versao; });
   TEM_REMUNERACAO = !!por.remuneracao;
+  TEM_PLR = !!por.plr;
   if (!por.avaliacao) return false;                 // base ainda vazia
   return juntarDocumentos(por.avaliacao.dados,
                           por.remuneracao && por.remuneracao.dados,
@@ -172,9 +174,17 @@ async function nuvemSalvar() {
   salvandoNuvem = true;
   try {
     const docs = separarDocumentos();
-    /* PLR e salário só são gravados por quem administra remuneração */
-    const alvos = PERFIL_NUVEM.verSalario
-      ? ['avaliacao', 'plr', 'remuneracao'] : ['avaliacao'];
+    /* PLR e salário só são gravados por quem administra remuneração — e só se
+       esses documentos tiverem sido realmente lidos nesta sessão. Sem essa
+       trava, uma leitura incompleta zera os valores em memória e o próximo
+       salvamento grava os zeros por cima do dado real. */
+    const alvos = ['avaliacao'];
+    if (PERFIL_NUVEM.verSalario) {
+      if (TEM_PLR) alvos.push('plr');
+      if (TEM_REMUNERACAO) alvos.push('remuneracao');
+      if (!TEM_PLR || !TEM_REMUNERACAO)
+        console.warn('Gravação de PLR/salário bloqueada: documento não lido nesta sessão.');
+    }
     for (const chave of alvos) {
       const { data, error } = await sb.rpc('salvar_documento',
         { p_chave: chave, p_dados: docs[chave], p_versao: VERSAO[chave] });
@@ -226,6 +236,7 @@ async function nuvemSemear() {
     marcar('Só o gerente pode fazer a carga inicial'); return false;
   }
   VERSAO = { avaliacao: null, plr: null, remuneracao: null };
+  TEM_PLR = TEM_REMUNERACAO = true;      /* base vazia: a carga escreve os três */
   const ok = await nuvemSalvar();
   if (ok) marcar('Carga inicial concluída · ' + DADOS.length + ' colaboradores');
   return ok;
