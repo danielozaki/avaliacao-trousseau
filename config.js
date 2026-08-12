@@ -13,6 +13,6 @@
    NUNCA coloque aqui a chave service_role.
    ===================================================================== */
 window.SUPA = {
-  url:     'https://xzalsjfnrmdlybjnsjiy.supabase.com',
+  url:     'https://xzalsjfnrmdlybjnsjiy.supabase.co',
   anonKey: 'sb_publishable_3elgeLB6Q4rJEtgGWuwnIg_TWt8oIuY'
 };
