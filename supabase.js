@@ -110,6 +110,7 @@ function juntarDocumentos(aval, remun, docPlr) {
   CICLO_ATIVO = (aval.ciclo && CICLOS.some(c => c.id === aval.ciclo)) ? aval.ciclo : CICLOS[0].id;
   carregarCiclo(CICLO_ATIVO);
   aplicarFotos();
+  if (typeof DEMO !== 'undefined') DEMO = false;   /* dado real da nuvem: sai o aviso de demonstração */
   return true;
 }
 
