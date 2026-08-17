@@ -4692,6 +4692,7 @@ function escolherFoto(p){
           const sx = (img.width - lado)/2, sy = Math.max(0, (img.height - lado)*0.32);
           ctx.drawImage(img, sx, sy, lado, lado, 0, 0, L, L);
           p.foto = cv.toDataURL('image/jpeg', 0.76);
+          if(typeof FOTOS !== 'undefined') FOTOS[chaveFoto(p.nome)] = p.foto;  /* entra no lookup: sincroniza com a nuvem e sobrevive à recarga */
           registrar('atualizou foto', p);
           commit('Foto atualizada · ' + curto(p.nome));
         }catch(e){ marcar('Não foi possível processar a imagem'); }

@@ -12,9 +12,10 @@
 const NUVEM = !!(window.SUPA && window.SUPA.url && window.SUPA.anonKey
                  && !/COLE_/i.test(window.SUPA.url + window.SUPA.anonKey));
 let sb = null;
-let VERSAO = { avaliacao: null, plr: null, remuneracao: null };
+let VERSAO = { avaliacao: null, plr: null, remuneracao: null, fotos: null };
 let TEM_REMUNERACAO = true;
 let TEM_PLR = true;
+let TEM_FOTOS = true;
 
 if (NUVEM) {
   try { sb = window.supabase.createClient(window.SUPA.url, window.SUPA.anonKey); }
@@ -68,11 +69,13 @@ function separarDocumentos() {
       v: 5, pessoas: comDinheiro, meritos,
       merito: { verba: MERITO.verba, modo: MERITO.modo, corte: MERITO.corte,
                 eixo: MERITO.eixo, curva: MERITO.curva, mapa: MERITO.mapa }
-    }
+    },
+    /* fotos ficam num documento à parte: base64 por nome, fora do blob de avaliação */
+    fotos: { v: 5, imagens: (typeof FOTOS !== 'undefined') ? Object.assign({}, FOTOS) : {} }
   };
 }
 
-function juntarDocumentos(aval, remun, docPlr) {
+function juntarDocumentos(aval, remun, docPlr, docFotos) {
   if (!aval || !Array.isArray(aval.pessoas)) return false;
   const money = {}, valores = {};
   if (remun && Array.isArray(remun.pessoas)) remun.pessoas.forEach(m => money[m.id] = m);
@@ -109,6 +112,10 @@ function juntarDocumentos(aval, remun, docPlr) {
   migrarHistorico();
   CICLO_ATIVO = (aval.ciclo && CICLOS.some(c => c.id === aval.ciclo)) ? aval.ciclo : CICLOS[0].id;
   carregarCiclo(CICLO_ATIVO);
+  /* fotos da nuvem entram no lookup local; aplicarFotos as reflete sobre DADOS */
+  if (docFotos && docFotos.imagens && typeof FOTOS !== 'undefined') {
+    Object.entries(docFotos.imagens).forEach(([k, v]) => { FOTOS[k] = v; });
+  }
   aplicarFotos();
   if (typeof DEMO !== 'undefined') DEMO = false;   /* dado real da nuvem: sai o aviso de demonstração */
   return true;
@@ -162,10 +169,12 @@ async function nuvemCarregar() {
   (data || []).forEach(d => { por[d.chave] = d; VERSAO[d.chave] = d.versao; });
   TEM_REMUNERACAO = !!por.remuneracao;
   TEM_PLR = !!por.plr;
+  TEM_FOTOS = !!por.fotos;
   if (!por.avaliacao) return false;                 // base ainda vazia
   return juntarDocumentos(por.avaliacao.dados,
                           por.remuneracao && por.remuneracao.dados,
-                          por.plr && por.plr.dados);
+                          por.plr && por.plr.dados,
+                          por.fotos && por.fotos.dados);
 }
 
 let salvandoNuvem = false, pendente = false;
@@ -180,6 +189,9 @@ async function nuvemSalvar() {
        trava, uma leitura incompleta zera os valores em memória e o próximo
        salvamento grava os zeros por cima do dado real. */
     const alvos = ['avaliacao'];
+    /* fotos não são dado sensível: qualquer editor grava, desde que o documento
+       tenha sido lido nesta sessão (mesma trava anti-zero dos demais) */
+    if (TEM_FOTOS) alvos.push('fotos');
     if (PERFIL_NUVEM.verSalario) {
       if (TEM_PLR) alvos.push('plr');
       if (TEM_REMUNERACAO) alvos.push('remuneracao');
@@ -236,8 +248,8 @@ async function nuvemSemear() {
   if (!PERFIL_NUVEM || PERFIL_NUVEM.papel !== 'gerente') {
     marcar('Só o gerente pode fazer a carga inicial'); return false;
   }
-  VERSAO = { avaliacao: null, plr: null, remuneracao: null };
-  TEM_PLR = TEM_REMUNERACAO = true;      /* base vazia: a carga escreve os três */
+  VERSAO = { avaliacao: null, plr: null, remuneracao: null, fotos: null };
+  TEM_PLR = TEM_REMUNERACAO = TEM_FOTOS = true;   /* base vazia: a carga escreve todos */
   const ok = await nuvemSalvar();
   if (ok) marcar('Carga inicial concluída · ' + DADOS.length + ' colaboradores');
   return ok;
