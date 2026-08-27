@@ -189,9 +189,13 @@ async function nuvemSalvar() {
        trava, uma leitura incompleta zera os valores em memória e o próximo
        salvamento grava os zeros por cima do dado real. */
     const alvos = ['avaliacao'];
-    /* fotos não são dado sensível: qualquer editor grava, desde que o documento
-       tenha sido lido nesta sessão (mesma trava anti-zero dos demais) */
-    if (TEM_FOTOS) alvos.push('fotos');
+    /* fotos não são dado sensível: qualquer editor grava. A condição é ter foto
+       em memória — nunca gravamos um documento vazio por cima de um que tenha
+       imagens (anti-zero), mas permitimos CRIAR o documento na primeira foto,
+       mesmo que ele ainda não exista no banco (senão nunca sairia do zero). */
+    const temFotoEmMemoria = (typeof FOTOS !== 'undefined') && Object.keys(FOTOS).length > 0;
+    if (temFotoEmMemoria) alvos.push('fotos');
+    else if (TEM_FOTOS) console.warn('Gravação de fotos pulada: nenhuma foto em memória nesta sessão.');
     if (PERFIL_NUVEM.verSalario) {
       if (TEM_PLR) alvos.push('plr');
       if (TEM_REMUNERACAO) alvos.push('remuneracao');
